@@ -1,122 +1,133 @@
-name: Build and publish the newest version and latest Docker image
-on:
-  release:
-    types: [published]
-  workflow_dispatch:
-
 jobs:
   build_and_publish_docker:
     name: Build and push the image to docker hub
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        id: buildx
-        with:
-          install: true
-      - name: Get the release tag
-        id: get_tag
-        run: echo ::set-output name=tag::${{ github.event.release.tag_name }}
-      - name: Prepare
-        id: prepare
-        run: |
-          function test_version() {
-            # Loads all versions ever published under the given namespace (max 1024) and splits them. The result is sorted.
-            curl -s -S "https://registry.hub.docker.com/v2/repositories/openrouteservice/openrouteservice/tags/?page_size=1024" |
-              sed -e 's/,/,\n/g' -e 's/\[/\[\n/g' |
-              grep '"name"' |
-              awk -F\" '{print $4;}' |
-              sort -fu
-          }
-
-          DOCKER_IMAGE=openrouteservice/openrouteservice
-          CURRENT_VERSIONS=$(test_version)
-          LATEST_IMAGE_VERSION=${{ steps.get_tag.outputs.tag }}
-          DOCKER_PLATFORMS=linux/amd64,linux/arm64
-          BUILD_VERSION=true
-
-          TAGS_LATEST_VERSION="${DOCKER_IMAGE}:${LATEST_IMAGE_VERSION}"
-          echo "HIGHEST MAYOR VERSION: $TAGS_HIGHEST_VERSION"
-          TAGS_LATEST="${DOCKER_IMAGE}:latest"
-
-          # Test if the latest published version is already in the versions at docker hub. If so skip the version build.
-          if [[ $CURRENT_VERSIONS =~ $LATEST_IMAGE_VERSION ]]; then
-            echo "Image version: $LATEST_IMAGE_VERSION present or latest. Skipping it!"
-            BUILD_VERSION=false
-          fi
-
-          echo ::set-output name=build_version::${BUILD_VERSION}
-          echo ::set-output name=build_platforms::${DOCKER_PLATFORMS}
-          echo ::set-output name=buildx_tags_version::${TAGS_LATEST_VERSION}
-          echo ::set-output name=buildx_tags_latest::${TAGS_LATEST}
-      - name: Login to DockerHub
-        if: ${{ steps.prepare.outputs.build_version == 'true' }}
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-      - name: Checkout version if needed
-        if: ${{ steps.prepare.outputs.build_version == 'true' }}
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.get_tag.outputs.tag }}
-      - name: Build and publish version if needed
-        if: ${{ steps.prepare.outputs.build_version == 'true' }}
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.prepare.outputs.buildx_tags_version }},${{ steps.prepare.outputs.buildx_tags_latest }}
-          platforms: ${{ steps.prepare.outputs.build_platforms }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - continue-on-error: true
+      name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+    - continue-on-error: true
+      id: buildx
+      name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      with:
+        install: true
+    - continue-on-error: true
+      id: get_tag
+      name: Get the release tag
+      run: echo ::set-output name=tag::${{ github.event.release.tag_name }}
+    - continue-on-error: true
+      id: prepare
+      name: Prepare
+      run: "function test_version() {\n  # Loads all versions ever published under\
+        \ the given namespace (max 1024) and splits them. The result is sorted.\n\
+        \  curl -s -S \"https://registry.hub.docker.com/v2/repositories/openrouteservice/openrouteservice/tags/?page_size=1024\"\
+        \ |\n    sed -e 's/,/,\\n/g' -e 's/\\[/\\[\\n/g' |\n    grep '\"name\"' |\n\
+        \    awk -F\\\" '{print $4;}' |\n    sort -fu\n}\n\nDOCKER_IMAGE=openrouteservice/openrouteservice\n\
+        CURRENT_VERSIONS=$(test_version)\nLATEST_IMAGE_VERSION=${{ steps.get_tag.outputs.tag\
+        \ }}\nDOCKER_PLATFORMS=linux/amd64,linux/arm64\nBUILD_VERSION=true\n\nTAGS_LATEST_VERSION=\"\
+        ${DOCKER_IMAGE}:${LATEST_IMAGE_VERSION}\"\necho \"HIGHEST MAYOR VERSION: $TAGS_HIGHEST_VERSION\"\
+        \nTAGS_LATEST=\"${DOCKER_IMAGE}:latest\"\n\n# Test if the latest published\
+        \ version is already in the versions at docker hub. If so skip the version\
+        \ build.\nif [[ $CURRENT_VERSIONS =~ $LATEST_IMAGE_VERSION ]]; then\n  echo\
+        \ \"Image version: $LATEST_IMAGE_VERSION present or latest. Skipping it!\"\
+        \n  BUILD_VERSION=false\nfi\n\necho ::set-output name=build_version::${BUILD_VERSION}\n\
+        echo ::set-output name=build_platforms::${DOCKER_PLATFORMS}\necho ::set-output\
+        \ name=buildx_tags_version::${TAGS_LATEST_VERSION}\necho ::set-output name=buildx_tags_latest::${TAGS_LATEST}\n"
+    - continue-on-error: true
+      if: ${{ steps.prepare.outputs.build_version == 'true' }}
+      name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        password: ${{ secrets.DOCKER_TOKEN }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+    - continue-on-error: true
+      if: ${{ steps.prepare.outputs.build_version == 'true' }}
+      name: Checkout version if needed
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ steps.get_tag.outputs.tag }}
+    - continue-on-error: true
+      if: ${{ steps.prepare.outputs.build_version == 'true' }}
+      name: Build and publish version if needed
+      uses: docker/build-push-action@v4
+      with:
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        context: .
+        platforms: ${{ steps.prepare.outputs.build_platforms }}
+        push: false
+        tags: ${{ steps.prepare.outputs.buildx_tags_version }},${{ steps.prepare.outputs.buildx_tags_latest
+          }}
   build_and_publish_release_artifacts:
-    runs-on: ubuntu-latest
     needs: build_and_publish_docker
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'maven'
-          cache-dependency-path: ./pom.xml
-      - name: Build JAR
-        run: |
-          mvn -q clean package -DskipTests
-          # Copy the JAR to the root directory
-          cp ors-api/target/ors.jar ors.jar
-      - name: Build WAR
-        run: |
-          mvn -q clean package -DskipTests -PbuildWar
-          # Copy the WAR to the root directory
-          cp ors-api/target/ors.war ors.war
-      - name: Get the release tag
-        id: get_tag
-        run: echo ::set-output name=tag::${{ github.event.release.tag_name }}
-      - name: Rewrite the docker-compose.yml image tag to the release tag
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          # Replace the image part
-          sed -i "s/local\/openrouteservice:latest/openrouteservice\/openrouteservice:${{ steps.get_tag.outputs.tag }}/g" docker-compose.yml
-      - name: Attach the files to the release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: |
-            ./ors.jar
-            ./ors.war
-            ./ors-config.yml
-            ./ors-config.env
-            ./docker-compose.yml
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - continue-on-error: true
+      name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        cache: maven
+        cache-dependency-path: ./pom.xml
+        distribution: temurin
+        java-version: '17'
+    - continue-on-error: true
+      name: Build JAR
+      run: 'mvn -q clean package -DskipTests
+
+        # Copy the JAR to the root directory
+
+        cp ors-api/target/ors.jar ors.jar
+
+        '
+    - continue-on-error: true
+      name: Build WAR
+      run: 'mvn -q clean package -DskipTests -PbuildWar
+
+        # Copy the WAR to the root directory
+
+        cp ors-api/target/ors.war ors.war
+
+        '
+    - continue-on-error: true
+      id: get_tag
+      name: Get the release tag
+      run: echo ::set-output name=tag::${{ github.event.release.tag_name }}
+    - continue-on-error: true
+      if: startsWith(github.ref, 'refs/tags/')
+      name: Rewrite the docker-compose.yml image tag to the release tag
+      run: '# Replace the image part
+
+        sed -i "s/local\/openrouteservice:latest/openrouteservice\/openrouteservice:${{
+        steps.get_tag.outputs.tag }}/g" docker-compose.yml
+
+        '
+    - continue-on-error: true
+      if: startsWith(github.ref, 'refs/tags/')
+      name: Attach the files to the release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: './ors.jar
+
+          ./ors.war
+
+          ./ors-config.yml
+
+          ./ors-config.env
+
+          ./docker-compose.yml'
+        token: ${{ secrets.GITHUB_TOKEN }}
+name: Build and publish the newest version and latest Docker image
+on:
+  repository_dispatch:
+    types: trigger-ga___publish-tagged-release.yml
